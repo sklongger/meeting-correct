@@ -2,6 +2,7 @@ import json
 import queue
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Optional, List, Dict
 
@@ -21,6 +22,7 @@ class FactCheckPipeline:
         min_sentence_length: int = 15,
         max_sentence_length: int = 500,
         sentence_timeout: float = 2.0,
+        max_verify_workers: int = 5,
     ):
         self.sentence_buffer = SentenceBuffer(
             min_length=min_sentence_length,
@@ -40,6 +42,7 @@ class FactCheckPipeline:
         self.running = False
         self.verify_thread: Optional[threading.Thread] = None
         self.timeout_thread: Optional[threading.Thread] = None
+        self.verify_executor = ThreadPoolExecutor(max_workers=max_verify_workers)
 
         self.extract_graph = build_extract_graph()
         self.verify_graph = build_verify_graph()
@@ -64,6 +67,8 @@ class FactCheckPipeline:
             self.verify_thread.join(timeout=5)
         if self.timeout_thread:
             self.timeout_thread.join(timeout=5)
+
+        self.verify_executor.shutdown(wait=False)
 
         print("[Pipeline] 已停止")
 
@@ -135,24 +140,27 @@ class FactCheckPipeline:
             except queue.Empty:
                 continue
 
-            try:
-                result = self.verify_graph.invoke(
-                    {
-                        "claim": fact["claim"],
-                        "original_text": fact.get("original_text", ""),
-                        "search_result": "",
-                        "verified": False,
-                        "summary": "",
-                    }
-                )
+            self.verify_executor.submit(self._do_verify, fact)
 
-                self._save_result(result)
+    def _do_verify(self, fact: dict):
+        try:
+            result = self.verify_graph.invoke(
+                {
+                    "claim": fact["claim"],
+                    "original_text": fact.get("original_text", ""),
+                    "search_result": "",
+                    "verified": False,
+                    "summary": "",
+                }
+            )
 
-                status = "✅" if result["verified"] else "❌"
-                print(f"[{status}] {result['claim'][:40]}...")
+            self._save_result(result)
 
-            except Exception as e:
-                print(f"[验证错误] {e}")
+            status = "✅" if result["verified"] else "❌"
+            print(f"[{status}] {result['claim'][:40]}...")
+
+        except Exception as e:
+            print(f"[验证错误] {e}")
 
     def _save_result(self, new_result: dict):
         with self.results_lock:
