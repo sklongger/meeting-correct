@@ -1,0 +1,27 @@
+[project]
+name = "meeting-correct"
+version = "0.1.0"
+description = "会议实时语音事实核查助手"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "dashscope>=1.25.13",
+    "fastapi>=0.135.1",
+    "numpy>=2.4.3",
+    "openai>=1.26.0",
+    "pyaudio>=0.2.14",
+    "requests>=2.32.5",
+    "sounddevice>=0.5.5",
+    "uvicorn>=0.41.0",
+    "watchdog>=6.0.0",
+    "websocket-client>=1.9.0",
+]
+
+[project.optional-dependencies]
+vad = [
+    "sherpa-onnx>=1.11.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core"]

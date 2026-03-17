@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会议实时事实核查</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .status { text-align: center; margin-bottom: 20px; padding: 10px; border-radius: 4px; }
+        .status.connected { background: #d4edda; color: #155724; }
+        .status.disconnected { background: #f8d7da; color: #721c24; }
+        .stats { display: flex; justify-content: center; gap: 40px; margin-bottom: 20px; }
+        .stat { text-align: center; }
+        .stat-num { font-size: 32px; font-weight: bold; }
+        .stat-label { color: #666; }
+        .results { background: white; border-radius: 8px; padding: 20px; }
+        .result-item { padding: 15px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #eee; }
+        .result-item.verified { border-left: 4px solid #28a745; }
+        .result-item.unverified { border-left: 4px solid #dc3545; }
+        .result-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .result-status { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .result-status.verified { background: #d4edda; color: #155724; }
+        .result-status.unverified { background: #f8d7da; color: #721c24; }
+        .result-claim { font-weight: bold; color: #333; flex: 1; }
+        .result-summary { color: #666; line-height: 1.6; }
+        .transcript { background: white; border-radius: 8px; padding: 20px; margin-top: 20px; }
+        .transcript h2 { margin-bottom: 10px; font-size: 18px; }
+        .transcript-content { color: #333; line-height: 1.8; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>会议实时事实核查</h1>
+        <div id="status" class="status disconnected">连接中...</div>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-num" id="total">0</div>
+                <div class="stat-label">总计事实</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num" id="verified" style="color: #28a745;">0</div>
+                <div class="stat-label">已验证真实</div>
+            </div>
+            <div class="stat">
+                <div class="stat-num" id="unverified" style="color: #dc3545;">0</div>
+                <div class="stat-label">存疑</div>
+            </div>
+        </div>
+
+        <div class="results" id="results">
+            <p style="color: #999; text-align: center;">等待实时数据...</p>
+        </div>
+
+        <div class="transcript">
+            <h2>转录文本</h2>
+            <div class="transcript-content" id="transcript"></div>
+        </div>
+    </div>
+
+    <script>
+        const ws = new WebSocket(`ws://${location.host}/ws`);
+        
+        ws.onopen = () => {
+            document.getElementById('status').textContent = '已连接';
+            document.getElementById('status').className = 'status connected';
+        };
+        
+        ws.onclose = () => {
+            document.getElementById('status').textContent = '连接断开';
+            document.getElementById('status').className = 'status disconnected';
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            updateDisplay(data);
+        };
+
+        function updateDisplay(data) {
+            const results = data.results || [];
+            const transcript = data.transcript || '';
+            
+            document.getElementById('total').textContent = results.length;
+            document.getElementById('verified').textContent = results.filter(r => r.verified).length;
+            document.getElementById('unverified').textContent = results.filter(r => !r.verified).length;
+            
+            document.getElementById('transcript').textContent = transcript;
+            
+            const resultsHtml = results.map(r => `
+                <div class="result-item ${r.verified ? 'verified' : 'unverified'}">
+                    <div class="result-header">
+                        <span class="result-status ${r.verified ? 'verified' : 'unverified'}">
+                            ${r.verified ? '✅ 真实' : '❌ 存疑'}
+                        </span>
+                        <span class="result-claim">${r.claim}</span>
+                    </div>
+                    <div class="result-summary">${r.summary || ''}</div>
+                </div>
+            `).join('');
+            
+            document.getElementById('results').innerHTML = resultsHtml || '<p style="color: #999; text-align: center;">等待实时数据...</p>';
+        }
+    </script>
+</body>
+</html>
