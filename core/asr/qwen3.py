@@ -8,16 +8,18 @@ import websocket
 from core.config import Config
 from core.asr.vad import init_vad
 
+# 最大帧长度 262144 字节，base64 编码增加 33%
+# 安全起见，每次发送不超过 1 秒音频 (32000 samples * 2 bytes = 64KB)
+MAX_CHUNK_SAMPLES = 16000  # 1 秒
+
 
 def run_asr(callback_func, vad_model_path: str = "models/silero_vad.onnx"):
     api_key = Config.QWEN_API_KEY
     url = f"wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime"
     print(f"开始录音... 按 Ctrl+C 停止")
 
-    # 初始化 VAD
     vad, window_size = init_vad(vad_model_path, sample_rate=16000)
-    audio_buffer = np.array([], dtype=np.float32)
-    print(f"[VAD] 已加载：{vad_model_path}")
+    print(f"[VAD] 已加载：{vad_model_path}, window_size={window_size}")
 
     def on_open(ws):
         event = {
@@ -32,6 +34,7 @@ def run_asr(callback_func, vad_model_path: str = "models/silero_vad.onnx"):
             },
         }
         ws.send(json.dumps(event))
+        print("[ASR] 会话已初始化")
 
     def on_message(ws, message):
         try:
@@ -40,6 +43,7 @@ def run_asr(callback_func, vad_model_path: str = "models/silero_vad.onnx"):
             if event_type == "conversation.item.input_audio_transcription.completed":
                 transcript = data.get("transcript", "").strip()
                 if transcript:
+                    print(f"[ASR] {transcript}")
                     callback_func(transcript)
         except json.JSONDecodeError:
             pass
@@ -49,6 +53,23 @@ def run_asr(callback_func, vad_model_path: str = "models/silero_vad.onnx"):
 
     def on_close(ws, code, reason):
         print(f"连接关闭：{code} - {reason}")
+
+    def send_audio_chunks(ws, audio_int16):
+        """将音频分块发送，避免超过 WebSocket 帧限制"""
+        for i in range(0, len(audio_int16), MAX_CHUNK_SAMPLES):
+            chunk = audio_int16[i : i + MAX_CHUNK_SAMPLES]
+            audio_b64 = base64.b64encode(chunk.tobytes()).decode("utf-8")
+            event = {
+                "event_id": f"event_{int(time.time() * 1000)}_{i}",
+                "type": "input_audio_buffer.append",
+                "audio": audio_b64,
+            }
+            try:
+                ws.send(json.dumps(event))
+            except Exception as e:
+                print(f"[发送错误] {e}")
+                return False
+        return True
 
     def audio_callback(indata, frames, time_info, status):
         nonlocal audio_buffer
@@ -64,16 +85,28 @@ def run_asr(callback_func, vad_model_path: str = "models/silero_vad.onnx"):
             if not vad.empty():
                 vad_samples = vad.front.samples
                 vad.pop()
-                audio_b64 = base64.b64encode(vad_samples.tobytes()).decode("utf-8")
-                event = {
-                    "event_id": f"event_{int(time.time() * 1000)}",
-                    "type": "input_audio_buffer.append",
-                    "audio": audio_b64,
-                }
-                try:
-                    ws.send(json.dumps(event))
-                except Exception:
-                    pass
+                # vad_samples 可能是 list，需要转换为 numpy array
+                if isinstance(vad_samples, list):
+                    vad_samples = np.array(vad_samples, dtype=np.float32)
+                # 转换为 int16 PCM 格式
+                vad_samples_int16 = (vad_samples * 32768.0).astype(np.int16)
+
+                # 分块发送音频
+                if send_audio_chunks(ws, vad_samples_int16):
+                    # 提交音频缓冲区，触发识别
+                    try:
+                        ws.send(
+                            json.dumps(
+                                {
+                                    "event_id": f"event_commit_{int(time.time() * 1000)}",
+                                    "type": "input_audio_buffer.commit",
+                                }
+                            )
+                        )
+                    except Exception:
+                        pass
+
+    audio_buffer = np.array([], dtype=np.float32)
 
     headers = [f"Authorization: Bearer {api_key}", "OpenAI-Beta: realtime=v1"]
     ws = websocket.WebSocketApp(

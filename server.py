@@ -17,8 +17,8 @@ async def lifespan(app: FastAPI):
 
     def run_watchdog():
         event_handler = FileChangeHandler()
-        observer = PollingObserver()
-        observer.schedule(event_handler, ".", recursive=False)
+        observer = PollingObserver(timeout=1.0)
+        observer.schedule(event_handler, "data", recursive=False)
         observer.start()
         observer.join()
 
@@ -30,8 +30,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-RESULTS_JSON = "fact_check_results.json"
-TRANSCRIPT_FILE = "transcript.txt"
+RESULTS_JSON = "data/fact_check_results.json"
+TRANSCRIPT_FILE = "data/transcript.txt"
 websocket_clients = []
 _main_loop = None
 
@@ -40,12 +40,8 @@ class FileChangeHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if event.is_directory:
             return
-        if (
-            event.src_path.endswith(RESULTS_JSON)
-            or event.src_path.endswith("./" + RESULTS_JSON)
-            or event.src_path.endswith(TRANSCRIPT_FILE)
-            or event.src_path.endswith("./" + TRANSCRIPT_FILE)
-        ):
+        filename = os.path.basename(event.src_path)
+        if filename in ["fact_check_results.json", "transcript.txt"]:
             if _main_loop and _main_loop.is_running():
                 asyncio.run_coroutine_threadsafe(push_to_clients(), _main_loop)
 

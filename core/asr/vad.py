@@ -38,9 +38,9 @@ def init_vad(model_path: str, sample_rate: int = 16000):
 
     vad_config = sherpa_onnx.VadModelConfig()
     vad_config.silero_vad.model = model_path
-    vad_config.silero_vad.min_silence_duration = 0.25
-    vad_config.silero_vad.min_speech_duration = 0.25
-    vad_config.silero_vad.threshold = 0.6
+    vad_config.silero_vad.min_silence_duration = 0.3
+    vad_config.silero_vad.min_speech_duration = 0.2
+    vad_config.silero_vad.threshold = 0.5  # 降低阈值，更容易触发
     vad_config.sample_rate = sample_rate
 
     if not vad_config.validate():
@@ -50,34 +50,3 @@ def init_vad(model_path: str, sample_rate: int = 16000):
     vad = sherpa_onnx.VoiceActivityDetector(vad_config, buffer_size_in_seconds=100)
 
     return vad, window_size
-
-
-def process_audio_with_vad(vad, audio_data, window_size):
-    """
-    将音频数据送入 VAD 处理
-
-    Args:
-        vad: VoiceActivityDetector 实例
-        audio_data: 音频数据 (numpy array, float32)
-        window_size: 窗口大小
-
-    Returns:
-        segments: 检测到的语音片段列表
-        buffer: 剩余未处理的音频数据
-    """
-    if not SHERPA_ONNX_AVAILABLE:
-        raise ImportError("sherpa-onnx 未安装")
-
-    buffer = audio_data
-
-    while len(buffer) >= window_size:
-        vad.accept_waveform(buffer[:window_size])
-        buffer = buffer[window_size:]
-
-    segments = []
-    while not vad.empty():
-        vad_samples = vad.front.samples
-        vad.pop()
-        segments.append(vad_samples)
-
-    return segments, buffer
