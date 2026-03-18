@@ -11,7 +11,6 @@ class CorrectNode(BaseNode[ExtractState]):
 
         try:
             response = self.llm.correct([{"role": "user", "content": prompt}])
-            print(f"[修正响应] {response[:200]}...")
             data = json.loads(response)
             corrected = data.get("corrected", text)
             changes = data.get("changes", [])
