@@ -10,7 +10,8 @@ class CorrectNode(BaseNode[ExtractState]):
         prompt = CORRECT_PROMPT.format(text=text)
 
         try:
-            response = self.llm.chat([{"role": "user", "content": prompt}])
+            response = self.llm.correct([{"role": "user", "content": prompt}])
+            print(f"[修正响应] {response[:200]}...")
             data = json.loads(response)
             corrected = data.get("corrected", text)
             changes = data.get("changes", [])

@@ -14,6 +14,7 @@ class ExtractNode(BaseNode[ExtractState]):
 
         try:
             response = self.llm.chat(messages)
+            print(f"[提取响应] {response[:200]}...")
             facts = json.loads(response)
 
             if not isinstance(facts, list):

@@ -10,12 +10,10 @@ class QwenClient:
         )
 
     def chat(self, messages, model=None, enable_search=False):
-        extra_body = {}
+        extra_body = {"enable_thinking": False}
         if enable_search:
-            extra_body = {
-                "enable_search": True,
-                "search_options": {"search_strategy": "turbo"},
-            }
+            extra_body["enable_search"] = True
+            extra_body["search_options"] = {"search_strategy": "turbo"}
         response = self.client.chat.completions.create(
             model=model or Config.FACT_CHECK_MODEL,
             messages=messages,
@@ -23,6 +21,9 @@ class QwenClient:
             extra_body=extra_body,
         )
         return response.choices[0].message.content
+
+    def correct(self, messages):
+        return self.chat(messages, model=Config.CORRECT_MODEL)
 
     def search(self, query):
         return self.chat([{"role": "user", "content": query}], enable_search=True)

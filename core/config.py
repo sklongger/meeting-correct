@@ -12,6 +12,7 @@ class Config:
     ASR_LANGUAGE = "zh-CN"
     SAMPLE_RATE = 16000
 
-    FACT_CHECK_MODEL = "qwen-plus"
-    SEARCH_MODEL = "qwen-plus"
+    FACT_CHECK_MODEL = "qwen3.5-plus"
+    SEARCH_MODEL = "qwen3.5-plus"
+    CORRECT_MODEL = "qwen3.5-flash"
     MERGE_WINDOW_SIZE = 20
